@@ -578,14 +578,16 @@ function initSupabase() {
 }
 
 async function bootApp() {
+  // Show the auth form immediately — never block the UI waiting for network
+  showAuthScreen();
+
   try {
     initSupabase();
   } catch (e) {
-    showAuthError('Connection failed. Please refresh the page.');
+    showAuthError('Could not connect to auth service. Please refresh.');
     return;
   }
 
-  // Only handle explicit sign-in/sign-out events (avoids double-firing on load)
   supabaseClient.auth.onAuthStateChange(async (event, session) => {
     if (event === 'SIGNED_IN' && session && !currentUser) {
       await afterSignIn(session.user);
@@ -596,27 +598,24 @@ async function bootApp() {
       localStorage.removeItem(PORTAL_KEY);
       showAuthScreen();
     }
-    // Handle email confirmation callback (PASSWORD_RECOVERY, etc.)
     if (event === 'PASSWORD_RECOVERY') {
       showAuthScreen();
       switchAuthTab('signin');
-      showAuthSuccess('You can now sign in and change your password in settings.');
+      showAuthSuccess('Password reset — sign in with your new password.');
     }
   });
 
-  // Initial session check — single source of truth on page load
-  setAuthLoading(true);
+  // Silently check for an existing session (8s timeout so it never hangs)
   try {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (session) {
-      await afterSignIn(session.user);
-    } else {
-      showAuthScreen();
+    const race = await Promise.race([
+      supabaseClient.auth.getSession(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000))
+    ]);
+    if (race.data?.session) {
+      await afterSignIn(race.data.session.user);
     }
-  } catch (e) {
-    showAuthScreen();
-  } finally {
-    setAuthLoading(false);
+  } catch (_) {
+    // Timeout or network error — user stays on auth screen and can sign in manually
   }
 }
 

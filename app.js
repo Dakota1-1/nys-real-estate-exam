@@ -571,22 +571,40 @@ function initSupabase() {
 }
 
 async function bootApp() {
-  initSupabase();
-  initThreeBackground('auth-bg-canvas');
+  try {
+    initSupabase();
+  } catch (e) {
+    showAuthError('Failed to connect. Check your internet connection and refresh.');
+    return;
+  }
 
-  // Listen for auth state changes (handles email confirmation redirects)
+  // Handle email confirmation redirects and sign-in events
   supabaseClient.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN' && session) {
-      await afterSignIn(session.user);
+    if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+      if (!currentUser) await afterSignIn(session.user);
+    } else if (event === 'SIGNED_OUT') {
+      currentUser = null; currentProfile = null;
+      showAuthScreen();
     }
   });
 
+  setAuthLoading(true);
   const { data: { session } } = await supabaseClient.auth.getSession();
+  setAuthLoading(false);
+
   if (session) {
     await afterSignIn(session.user);
   } else {
     showAuthScreen();
   }
+}
+
+function setAuthLoading(on) {
+  const spinner = document.getElementById('auth-spinner');
+  const forms   = document.querySelectorAll('.auth-form, .auth-tabs');
+  if (!spinner) return;
+  spinner.style.display = on ? 'flex' : 'none';
+  forms.forEach(f => { f.style.opacity = on ? '0.4' : '1'; f.style.pointerEvents = on ? 'none' : ''; });
 }
 
 async function afterSignIn(user) {
@@ -655,9 +673,11 @@ async function handleSignIn() {
   const password = document.getElementById('si-password').value;
   if (!email || !password) { showAuthError('Please enter your email and password.'); return; }
 
+  setAuthLoading(true);
   const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  setAuthLoading(false);
   if (error) { showAuthError(error.message); return; }
-  // onAuthStateChange will fire → afterSignIn
+  // onAuthStateChange → afterSignIn
 }
 
 async function handleRegister() {
@@ -665,11 +685,13 @@ async function handleRegister() {
   const email   = document.getElementById('reg-email').value.trim();
   const pass    = document.getElementById('reg-password').value;
   const confirm = document.getElementById('reg-confirm').value;
-  if (!email || !pass) { showAuthError('Please fill in all fields.'); return; }
+  if (!email || !pass || !confirm) { showAuthError('Please fill in all fields.'); return; }
   if (pass.length < 6)  { showAuthError('Password must be at least 6 characters.'); return; }
   if (pass !== confirm)  { showAuthError('Passwords do not match.'); return; }
 
+  setAuthLoading(true);
   const { error } = await supabaseClient.auth.signUp({ email, password: pass });
+  setAuthLoading(false);
   if (error) { showAuthError(error.message); return; }
   showAuthSuccess('Account created! Check your email to confirm, then sign in.');
 }
@@ -691,10 +713,12 @@ async function handleSignOut() {
 }
 
 function showAuthError(msg) {
-  document.getElementById('auth-error').textContent = msg;
+  const el = document.getElementById('auth-error');
+  if (el) el.textContent = msg;
 }
 function showAuthSuccess(msg) {
-  document.getElementById('auth-success').textContent = msg;
+  const el = document.getElementById('auth-success');
+  if (el) el.textContent = msg;
 }
 
 function showBannedScreen() {

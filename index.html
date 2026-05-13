@@ -8,82 +8,105 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+
+  <!-- Critical auth styles — inline so they apply even before styles.css parses fully -->
+  <style>
+    html, body { background: #0A0E1A; margin: 0; padding: 0; }
+    #auth-screen {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      background:
+        radial-gradient(ellipse at 15% 60%, rgba(201,168,76,0.10) 0%, transparent 55%),
+        radial-gradient(ellipse at 85% 25%, rgba(201,168,76,0.07) 0%, transparent 55%),
+        #0A0E1A;
+    }
+    #banned-screen {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      background: #0A0E1A;
+    }
+    #password-screen, #banned-screen, #app { display: none; }
+  </style>
 </head>
 <body>
 
   <!-- ═══ SCREEN 1: SUPABASE AUTH (Login / Register) ═══ -->
   <div id="auth-screen">
-    <canvas id="auth-bg-canvas"></canvas>
+    <!-- Pure-CSS animated orbs — no Three.js needed -->
+    <div class="auth-orb auth-orb-1"></div>
+    <div class="auth-orb auth-orb-2"></div>
+    <div class="auth-orb auth-orb-3"></div>
+
     <div class="auth-card" id="auth-card">
-      <div class="login-logo">
-        <div class="login-logo-icon">⚖</div>
+      <div class="auth-logo-wrap">
+        <span class="auth-logo-icon">⚖</span>
       </div>
-      <h1 class="login-title">NYS Real Estate Exam</h1>
-      <p class="login-subtitle">Premium Study Portal</p>
+      <h1 class="auth-title">NYS Real Estate Exam</h1>
+      <p class="auth-subtitle">Premium Study Portal</p>
 
       <div class="auth-tabs">
-        <button class="auth-tab active" id="tab-signin" onclick="switchAuthTab('signin')">Sign In</button>
-        <button class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Register</button>
+        <button class="auth-tab active" id="tab-signin"    onclick="switchAuthTab('signin')">Sign In</button>
+        <button class="auth-tab"        id="tab-register"  onclick="switchAuthTab('register')">Register</button>
       </div>
 
-      <!-- Sign In Form -->
+      <!-- Sign In -->
       <div id="signin-form" class="auth-form">
-        <div class="input-wrapper">
-          <input type="email" id="si-email" class="password-input" placeholder="Email address" autocomplete="email"/>
-          <div class="input-line"></div>
+        <div class="auth-input-group">
+          <label class="auth-label">Email</label>
+          <input type="email" id="si-email" class="auth-input" placeholder="you@example.com" autocomplete="email"/>
         </div>
-        <div class="input-wrapper" style="margin-top:14px">
-          <input type="password" id="si-password" class="password-input" placeholder="Password" autocomplete="current-password"/>
-          <div class="input-line"></div>
+        <div class="auth-input-group">
+          <label class="auth-label">Password</label>
+          <input type="password" id="si-password" class="auth-input" placeholder="••••••••" autocomplete="current-password"/>
         </div>
-        <button class="unlock-btn" onclick="handleSignIn()" style="margin-top:20px">
-          <span class="unlock-btn-text">Sign In</span>
-          <span class="unlock-btn-icon">→</span>
+        <button class="auth-submit-btn" onclick="handleSignIn()">
+          Sign In <span class="btn-arrow">→</span>
         </button>
         <p class="auth-forgot" onclick="handleForgotPassword()">Forgot password?</p>
       </div>
 
-      <!-- Register Form -->
+      <!-- Register -->
       <div id="register-form" class="auth-form" style="display:none">
-        <div class="input-wrapper">
-          <input type="email" id="reg-email" class="password-input" placeholder="Email address" autocomplete="email"/>
-          <div class="input-line"></div>
+        <div class="auth-input-group">
+          <label class="auth-label">Email</label>
+          <input type="email" id="reg-email" class="auth-input" placeholder="you@example.com" autocomplete="email"/>
         </div>
-        <div class="input-wrapper" style="margin-top:14px">
-          <input type="password" id="reg-password" class="password-input" placeholder="Password (min 6 characters)" autocomplete="new-password"/>
-          <div class="input-line"></div>
+        <div class="auth-input-group">
+          <label class="auth-label">Password</label>
+          <input type="password" id="reg-password" class="auth-input" placeholder="Min. 6 characters" autocomplete="new-password"/>
         </div>
-        <div class="input-wrapper" style="margin-top:14px">
-          <input type="password" id="reg-confirm" class="password-input" placeholder="Confirm password" autocomplete="new-password"/>
-          <div class="input-line"></div>
+        <div class="auth-input-group">
+          <label class="auth-label">Confirm Password</label>
+          <input type="password" id="reg-confirm" class="auth-input" placeholder="Re-enter password" autocomplete="new-password"/>
         </div>
-        <button class="unlock-btn" onclick="handleRegister()" style="margin-top:20px">
-          <span class="unlock-btn-text">Create Account</span>
-          <span class="unlock-btn-icon">→</span>
+        <button class="auth-submit-btn" onclick="handleRegister()">
+          Create Account <span class="btn-arrow">→</span>
         </button>
       </div>
 
-      <p class="login-error" id="auth-error"></p>
-      <p class="auth-success" id="auth-success"></p>
+      <p class="auth-msg auth-error-msg" id="auth-error"></p>
+      <p class="auth-msg auth-success-msg" id="auth-success"></p>
+
+      <div class="auth-spinner" id="auth-spinner" style="display:none">
+        <div class="spinner-ring"></div>
+      </div>
     </div>
   </div>
 
   <!-- ═══ SCREEN 2: BANNED ═══ -->
-  <div id="banned-screen" style="display:none">
-    <canvas id="banned-bg-canvas"></canvas>
-    <div class="auth-card banned-card">
+  <div id="banned-screen">
+    <div class="auth-card" style="text-align:center">
       <div class="banned-icon">🚫</div>
-      <h1 class="login-title" style="color:var(--error)">Access Suspended</h1>
-      <p class="login-subtitle">Your account has been suspended by an administrator.<br>Contact support if you believe this is an error.</p>
-      <button class="unlock-btn" onclick="handleSignOut()" style="margin-top:28px;background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.35)">
-        <span class="unlock-btn-text">Sign Out</span>
-        <span class="unlock-btn-icon">→</span>
+      <h1 class="auth-title" style="color:#EF4444">Access Suspended</h1>
+      <p class="auth-subtitle" style="margin-bottom:32px">Your account has been suspended.<br>Contact support if this is an error.</p>
+      <button class="auth-submit-btn" style="background:rgba(239,68,68,0.15);border-color:rgba(239,68,68,0.4)" onclick="handleSignOut()">
+        Sign Out <span class="btn-arrow">→</span>
       </button>
     </div>
   </div>
 
   <!-- ═══ SCREEN 3: PASSWORD GATE ═══ -->
-  <div id="password-screen" style="display:none">
+  <div id="password-screen">
     <canvas id="bg-canvas"></canvas>
     <div class="login-card" id="login-card">
       <div class="login-logo">
@@ -93,13 +116,8 @@
       <p class="login-subtitle" id="pw-greeting">Welcome — enter the portal password</p>
       <div class="login-form">
         <div class="input-wrapper">
-          <input
-            type="password"
-            id="password-input"
-            class="password-input"
-            placeholder="Enter access password"
-            autocomplete="off"
-          />
+          <input type="password" id="password-input" class="password-input"
+            placeholder="Enter access password" autocomplete="off"/>
           <div class="input-line"></div>
         </div>
         <button class="unlock-btn" id="unlock-btn" onclick="handleLogin()">
@@ -113,30 +131,22 @@
   </div>
 
   <!-- ═══ SCREEN 4: MAIN APP ═══ -->
-  <div id="app" style="display:none">
-
-    <!-- NAVBAR -->
+  <div id="app">
     <nav id="navbar">
       <div class="nav-inner">
         <a class="nav-logo" href="#dashboard" onclick="navigate('dashboard')">
           <span class="nav-logo-icon">⚖</span>
           <span class="nav-logo-text">NYS <span class="gold">RE</span> Exam</span>
         </a>
-
         <div class="nav-links">
           <a class="nav-link" href="#dashboard" onclick="navigate('dashboard')">Dashboard</a>
-
           <div class="nav-dropdown">
-            <button class="nav-link nav-dropdown-btn">
-              Units <span class="dropdown-arrow">▾</span>
-            </button>
+            <button class="nav-link nav-dropdown-btn">Units <span class="dropdown-arrow">▾</span></button>
             <div class="nav-dropdown-menu" id="units-dropdown"></div>
           </div>
-
           <a class="nav-link" href="#final" onclick="navigate('final')">Final Review</a>
           <a class="nav-link nav-admin-link" id="nav-admin-link" href="#admin" onclick="navigate('admin')" style="display:none">Admin</a>
         </div>
-
         <div class="nav-right">
           <div class="nav-progress-badge" id="nav-progress-badge">
             <div class="progress-badge-ring">
@@ -151,10 +161,8 @@
           </div>
           <button class="nav-sign-out" onclick="handleSignOut()" title="Sign out">⏏</button>
         </div>
-
         <button class="nav-mobile-toggle" id="mobile-toggle" onclick="toggleMobileMenu()">☰</button>
       </div>
-
       <div class="mobile-menu" id="mobile-menu">
         <a class="mobile-link" href="#dashboard" onclick="navigate('dashboard');closeMobileMenu()">Dashboard</a>
         <div id="mobile-units-links"></div>
@@ -163,10 +171,7 @@
         <a class="mobile-link" onclick="handleSignOut()" style="color:var(--text-muted)">Sign Out</a>
       </div>
     </nav>
-
-    <!-- PAGE CONTENT -->
     <main id="page-content"></main>
-
   </div>
 
   <!-- Scripts -->

@@ -1695,9 +1695,9 @@ input { font-family: inherit; }
 }
 .auth-forgot:hover { color: var(--gold); text-decoration: underline; }
 
-/* Loading spinner */
+/* Loading spinner — hidden by default; JS sets display:flex to show */
 .auth-spinner {
-  display: flex;
+  display: none;
   justify-content: center;
   margin-top: 16px;
 }

@@ -566,36 +566,57 @@ function initThreeBackground(canvasId) {
 /* ============================================================
    SUPABASE INIT & AUTH FLOW
    ============================================================ */
+const PORTAL_KEY = 'nyre_portal_unlocked'; // localStorage key — persists across refreshes
+
 function initSupabase() {
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+    auth: {
+      // Send email confirmation links to the live site, not localhost
+      redirectTo: window.location.origin
+    }
+  });
 }
 
 async function bootApp() {
   try {
     initSupabase();
   } catch (e) {
-    showAuthError('Failed to connect. Check your internet connection and refresh.');
+    showAuthError('Connection failed. Please refresh the page.');
     return;
   }
 
-  // Handle email confirmation redirects and sign-in events
+  // Only handle explicit sign-in/sign-out events (avoids double-firing on load)
   supabaseClient.auth.onAuthStateChange(async (event, session) => {
-    if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
-      if (!currentUser) await afterSignIn(session.user);
-    } else if (event === 'SIGNED_OUT') {
-      currentUser = null; currentProfile = null;
+    if (event === 'SIGNED_IN' && session && !currentUser) {
+      await afterSignIn(session.user);
+    }
+    if (event === 'SIGNED_OUT') {
+      currentUser = null;
+      currentProfile = null;
+      localStorage.removeItem(PORTAL_KEY);
       showAuthScreen();
+    }
+    // Handle email confirmation callback (PASSWORD_RECOVERY, etc.)
+    if (event === 'PASSWORD_RECOVERY') {
+      showAuthScreen();
+      switchAuthTab('signin');
+      showAuthSuccess('You can now sign in and change your password in settings.');
     }
   });
 
+  // Initial session check — single source of truth on page load
   setAuthLoading(true);
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  setAuthLoading(false);
-
-  if (session) {
-    await afterSignIn(session.user);
-  } else {
+  try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session) {
+      await afterSignIn(session.user);
+    } else {
+      showAuthScreen();
+    }
+  } catch (e) {
     showAuthScreen();
+  } finally {
+    setAuthLoading(false);
   }
 }
 
@@ -604,12 +625,21 @@ function setAuthLoading(on) {
   const forms   = document.querySelectorAll('.auth-form, .auth-tabs');
   if (!spinner) return;
   spinner.style.display = on ? 'flex' : 'none';
-  forms.forEach(f => { f.style.opacity = on ? '0.4' : '1'; f.style.pointerEvents = on ? 'none' : ''; });
+  forms.forEach(f => {
+    f.style.opacity = on ? '0.4' : '1';
+    f.style.pointerEvents = on ? 'none' : '';
+  });
 }
 
 async function afterSignIn(user) {
   currentUser = user;
-  const profile = await fetchOrCreateProfile(user);
+
+  let profile = null;
+  try {
+    profile = await fetchOrCreateProfile(user);
+  } catch (e) {
+    // Profile table may not exist yet — still let user through to password gate
+  }
   currentProfile = profile;
 
   if (profile && profile.is_banned) {
@@ -617,8 +647,8 @@ async function afterSignIn(user) {
     return;
   }
 
-  // Check if password already verified this session
-  if (sessionStorage.getItem('portal_authed') === '1') {
+  // Skip portal password if user already unlocked it (persists across refreshes)
+  if (localStorage.getItem(PORTAL_KEY) === '1') {
     showApp();
   } else {
     showPasswordScreen();
@@ -626,8 +656,7 @@ async function afterSignIn(user) {
 }
 
 async function fetchOrCreateProfile(user) {
-  // Try fetching existing profile
-  const { data, error } = await supabaseClient
+  const { data } = await supabaseClient
     .from('profiles')
     .select('*')
     .eq('id', user.id)
@@ -635,8 +664,8 @@ async function fetchOrCreateProfile(user) {
 
   if (data) return data;
 
-  // Create profile if it doesn't exist yet
-  const isAdmin = user.email === ADMIN_EMAIL;
+  // First time — create the profile row
+  const isAdmin = user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const { data: created } = await supabaseClient
     .from('profiles')
     .insert({ id: user.id, email: user.email, is_admin: isAdmin, is_banned: false })
@@ -652,6 +681,7 @@ function showAuthScreen() {
   document.getElementById('password-screen').style.display = 'none';
   document.getElementById('banned-screen').style.display = 'none';
   document.getElementById('app').style.display = 'none';
+  setAuthLoading(false);
 }
 
 function switchAuthTab(tab) {
@@ -663,8 +693,10 @@ function switchAuthTab(tab) {
 }
 
 function clearAuthMessages() {
-  document.getElementById('auth-error').textContent   = '';
-  document.getElementById('auth-success').textContent = '';
+  const e = document.getElementById('auth-error');
+  const s = document.getElementById('auth-success');
+  if (e) e.textContent = '';
+  if (s) s.textContent = '';
 }
 
 async function handleSignIn() {
@@ -674,10 +706,15 @@ async function handleSignIn() {
   if (!email || !password) { showAuthError('Please enter your email and password.'); return; }
 
   setAuthLoading(true);
-  const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
   setAuthLoading(false);
-  if (error) { showAuthError(error.message); return; }
-  // onAuthStateChange → afterSignIn
+  if (error) {
+    showAuthError(error.message === 'Email not confirmed'
+      ? 'Please confirm your email first — check your inbox (and spam folder).'
+      : error.message);
+    return;
+  }
+  // onAuthStateChange SIGNED_IN → afterSignIn
 }
 
 async function handleRegister() {
@@ -690,25 +727,37 @@ async function handleRegister() {
   if (pass !== confirm)  { showAuthError('Passwords do not match.'); return; }
 
   setAuthLoading(true);
-  const { error } = await supabaseClient.auth.signUp({ email, password: pass });
+  const { data, error } = await supabaseClient.auth.signUp({
+    email,
+    password: pass,
+    options: { emailRedirectTo: window.location.origin }
+  });
   setAuthLoading(false);
   if (error) { showAuthError(error.message); return; }
-  showAuthSuccess('Account created! Check your email to confirm, then sign in.');
+
+  // If Supabase returns a session immediately, email confirmation is disabled — sign straight in
+  if (data.session) {
+    await afterSignIn(data.user);
+  } else {
+    showAuthSuccess('Account created! Check your email for a confirmation link, then sign in here.');
+  }
 }
 
 async function handleForgotPassword() {
   const email = document.getElementById('si-email').value.trim();
-  if (!email) { showAuthError('Enter your email address above first.'); return; }
-  const { error } = await supabaseClient.auth.resetPasswordForEmail(email);
+  if (!email) { showAuthError('Enter your email address first, then click forgot password.'); return; }
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin
+  });
   if (error) { showAuthError(error.message); return; }
-  showAuthSuccess('Password reset email sent! Check your inbox.');
+  showAuthSuccess('Password reset link sent! Check your inbox.');
 }
 
 async function handleSignOut() {
-  await supabaseClient.auth.signOut();
-  sessionStorage.removeItem('portal_authed');
+  localStorage.removeItem(PORTAL_KEY);
   currentUser = null;
   currentProfile = null;
+  await supabaseClient.auth.signOut();
   showAuthScreen();
 }
 
@@ -726,7 +775,6 @@ function showBannedScreen() {
   document.getElementById('password-screen').style.display = 'none';
   document.getElementById('app').style.display = 'none';
   document.getElementById('banned-screen').style.display = 'flex';
-  initThreeBackground('banned-bg-canvas');
 }
 
 /* ── Password Gate ── */
@@ -737,22 +785,24 @@ function showPasswordScreen() {
   document.getElementById('password-screen').style.display = 'flex';
   initThreeBackground('bg-canvas');
 
-  // Greet user by email
   if (currentUser) {
     const name = currentUser.email.split('@')[0];
-    const greeting = document.getElementById('pw-greeting');
-    if (greeting) greeting.textContent = `Welcome, ${name} — enter the portal password`;
+    const el = document.getElementById('pw-greeting');
+    if (el) el.textContent = `Welcome, ${name} — enter the portal password`;
   }
 
   const inp = document.getElementById('password-input');
-  inp.value = '';
-  inp.addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+  if (inp) {
+    inp.value = '';
+    inp.focus();
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+  }
 }
 
 function handleLogin() {
   const val = document.getElementById('password-input').value;
   if (val === 'Rishab Is The Best') {
-    sessionStorage.setItem('portal_authed', '1');
+    localStorage.setItem(PORTAL_KEY, '1'); // persists across refreshes
     const screen = document.getElementById('password-screen');
     screen.classList.add('hiding');
     setTimeout(() => {
@@ -1552,34 +1602,57 @@ function escapeHTML(str) {
    ADMIN PAGE
    ============================================================ */
 async function renderAdminPage() {
-  setPage(`<div class="page"><div class="admin-loading">Loading users…</div></div>`);
+  setPage(`<div class="page"><div class="admin-loading"><div class="spinner-ring" style="width:36px;height:36px;border-width:3px"></div><p style="margin-top:16px;color:var(--text-muted)">Loading users…</p></div></div>`);
 
-  // Fetch all profiles (requires admin RLS policy)
   const { data: profiles, error } = await supabaseClient
     .from('profiles')
     .select('*')
     .order('created_at', { ascending: false });
 
   if (error) {
-    setPage(`<div class="page"><div class="admin-error">Error loading users: ${escapeHTML(error.message)}</div></div>`);
+    setPage(`<div class="page"><div class="admin-error">
+      <p>⚠️ Could not load users.</p>
+      <p style="font-size:13px;margin-top:8px;color:var(--text-muted)">${escapeHTML(error.message)}</p>
+      <p style="font-size:12px;margin-top:8px;color:var(--text-muted)">Make sure you've run the SQL setup in your Supabase dashboard.</p>
+    </div></div>`);
     return;
   }
 
+  const total     = (profiles || []).length;
+  const banned    = (profiles || []).filter(p => p.is_banned).length;
+  const active    = total - banned;
+
   const rows = (profiles || []).map(p => {
-    const isMe = p.id === currentUser.id;
-    const bannedLabel = p.is_banned
-      ? `<span class="badge-banned">Banned</span>`
-      : `<span class="badge-active">Active</span>`;
-    const adminLabel = p.is_admin ? `<span class="badge-admin">Admin</span>` : '';
-    const banBtn = isMe ? '' : p.is_banned
-      ? `<button class="admin-btn unban-btn" onclick="adminSetBan('${p.id}', false)">Unban</button>`
-      : `<button class="admin-btn ban-btn" onclick="adminSetBan('${p.id}', true)">Ban</button>`;
+    const isMe     = p.id === currentUser.id;
+    const joined   = new Date(p.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+
+    const statusBadge = p.is_admin
+      ? `<span class="badge-admin">Admin</span>`
+      : p.is_banned
+        ? `<span class="badge-banned">Banned</span>`
+        : `<span class="badge-active">Active</span>`;
+
+    const actions = isMe
+      ? `<span class="admin-you-badge">You</span>`
+      : `<div class="admin-actions">
+          ${p.is_banned
+            ? `<button class="admin-btn unban-btn" onclick="adminSetBan('${p.id}',false)">Unban</button>`
+            : `<button class="admin-btn ban-btn"   onclick="adminSetBan('${p.id}',true)">Ban</button>`}
+          <button class="admin-btn reset-btn" onclick="adminSendReset('${escapeHTML(p.email)}')">Reset PW</button>
+        </div>`;
+
     return `
       <tr class="${p.is_banned ? 'row-banned' : ''}">
-        <td class="admin-email">${escapeHTML(p.email)} ${adminLabel}</td>
-        <td>${bannedLabel}</td>
-        <td class="admin-date">${new Date(p.created_at).toLocaleDateString()}</td>
-        <td>${banBtn}</td>
+        <td class="admin-email-cell">
+          <div class="admin-email">${escapeHTML(p.email)}</div>
+          <div class="admin-uid">ID: ${p.id.substring(0,8)}…</div>
+        </td>
+        <td class="admin-pw-cell">
+          <span class="pw-secured" title="Passwords are bcrypt-hashed — unrecoverable by design">🔒 Secured</span>
+        </td>
+        <td>${statusBadge}</td>
+        <td class="admin-date">${joined}</td>
+        <td>${actions}</td>
       </tr>`;
   }).join('');
 
@@ -1589,8 +1662,18 @@ async function renderAdminPage() {
         <div>
           <div class="page-eyebrow">Admin Panel</div>
           <h1 class="page-title">User Management</h1>
-          <p class="page-subtitle">${(profiles || []).length} registered users</p>
+          <p class="page-subtitle">${total} registered accounts</p>
         </div>
+        <div class="admin-stat-chips">
+          <div class="admin-chip">${active} <span>Active</span></div>
+          <div class="admin-chip chip-banned">${banned} <span>Banned</span></div>
+        </div>
+      </div>
+
+      <div class="admin-notice">
+        🔒 <strong>Passwords are never stored in plain text.</strong>
+        Supabase uses bcrypt hashing — no one, including you, can see a user's password.
+        Use <em>Reset PW</em> to send them a reset email.
       </div>
 
       <div class="admin-table-wrap">
@@ -1598,12 +1681,13 @@ async function renderAdminPage() {
           <thead>
             <tr>
               <th>Email</th>
+              <th>Password</th>
               <th>Status</th>
               <th>Joined</th>
               <th>Actions</th>
             </tr>
           </thead>
-          <tbody id="admin-tbody">${rows}</tbody>
+          <tbody>${rows}</tbody>
         </table>
       </div>
     </div>`);
@@ -1614,13 +1698,17 @@ async function adminSetBan(userId, banned) {
     .from('profiles')
     .update({ is_banned: banned })
     .eq('id', userId);
-
-  if (error) {
-    alert('Error: ' + error.message);
-    return;
-  }
-  // Refresh the page
+  if (error) { alert('Error: ' + error.message); return; }
   renderAdminPage();
+}
+
+async function adminSendReset(email) {
+  if (!confirm(`Send a password reset email to ${email}?`)) return;
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin
+  });
+  if (error) { alert('Error: ' + error.message); return; }
+  alert(`Password reset email sent to ${email}`);
 }
 
 /* ============================================================

@@ -9,3 +9,5 @@ Thumbs.db
 # Temp files
 *.tmp
 extracted_content.txt
+
+.vercel

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NYS Real Estate Exam — Study Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ═══ SCREEN 1: SUPABASE AUTH (Login / Register) ═══ -->
+  <div id="auth-screen">
+    <canvas id="auth-bg-canvas"></canvas>
+    <div class="auth-card" id="auth-card">
+      <div class="login-logo">
+        <div class="login-logo-icon">⚖</div>
+      </div>
+      <h1 class="login-title">NYS Real Estate Exam</h1>
+      <p class="login-subtitle">Premium Study Portal</p>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-signin" onclick="switchAuthTab('signin')">Sign In</button>
+        <button class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Register</button>
+      </div>
+
+      <!-- Sign In Form -->
+      <div id="signin-form" class="auth-form">
+        <div class="input-wrapper">
+          <input type="email" id="si-email" class="password-input" placeholder="Email address" autocomplete="email"/>
+          <div class="input-line"></div>
+        </div>
+        <div class="input-wrapper" style="margin-top:14px">
+          <input type="password" id="si-password" class="password-input" placeholder="Password" autocomplete="current-password"/>
+          <div class="input-line"></div>
+        </div>
+        <button class="unlock-btn" onclick="handleSignIn()" style="margin-top:20px">
+          <span class="unlock-btn-text">Sign In</span>
+          <span class="unlock-btn-icon">→</span>
+        </button>
+        <p class="auth-forgot" onclick="handleForgotPassword()">Forgot password?</p>
+      </div>
+
+      <!-- Register Form -->
+      <div id="register-form" class="auth-form" style="display:none">
+        <div class="input-wrapper">
+          <input type="email" id="reg-email" class="password-input" placeholder="Email address" autocomplete="email"/>
+          <div class="input-line"></div>
+        </div>
+        <div class="input-wrapper" style="margin-top:14px">
+          <input type="password" id="reg-password" class="password-input" placeholder="Password (min 6 characters)" autocomplete="new-password"/>
+          <div class="input-line"></div>
+        </div>
+        <div class="input-wrapper" style="margin-top:14px">
+          <input type="password" id="reg-confirm" class="password-input" placeholder="Confirm password" autocomplete="new-password"/>
+          <div class="input-line"></div>
+        </div>
+        <button class="unlock-btn" onclick="handleRegister()" style="margin-top:20px">
+          <span class="unlock-btn-text">Create Account</span>
+          <span class="unlock-btn-icon">→</span>
+        </button>
+      </div>
+
+      <p class="login-error" id="auth-error"></p>
+      <p class="auth-success" id="auth-success"></p>
+    </div>
+  </div>
+
+  <!-- ═══ SCREEN 2: BANNED ═══ -->
+  <div id="banned-screen" style="display:none">
+    <canvas id="banned-bg-canvas"></canvas>
+    <div class="auth-card banned-card">
+      <div class="banned-icon">🚫</div>
+      <h1 class="login-title" style="color:var(--error)">Access Suspended</h1>
+      <p class="login-subtitle">Your account has been suspended by an administrator.<br>Contact support if you believe this is an error.</p>
+      <button class="unlock-btn" onclick="handleSignOut()" style="margin-top:28px;background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.35)">
+        <span class="unlock-btn-text">Sign Out</span>
+        <span class="unlock-btn-icon">→</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══ SCREEN 3: PASSWORD GATE ═══ -->
+  <div id="password-screen" style="display:none">
+    <canvas id="bg-canvas"></canvas>
+    <div class="login-card" id="login-card">
+      <div class="login-logo">
+        <div class="login-logo-icon">🔑</div>
+      </div>
+      <h1 class="login-title">Portal Access</h1>
+      <p class="login-subtitle" id="pw-greeting">Welcome — enter the portal password</p>
+      <div class="login-form">
+        <div class="input-wrapper">
+          <input
+            type="password"
+            id="password-input"
+            class="password-input"
+            placeholder="Enter access password"
+            autocomplete="off"
+          />
+          <div class="input-line"></div>
+        </div>
+        <button class="unlock-btn" id="unlock-btn" onclick="handleLogin()">
+          <span class="unlock-btn-text">Unlock Portal</span>
+          <span class="unlock-btn-icon">→</span>
+        </button>
+        <p class="login-error" id="login-error"></p>
+        <p class="auth-sign-out-link" onclick="handleSignOut()">Sign out of account</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SCREEN 4: MAIN APP ═══ -->
+  <div id="app" style="display:none">
+
+    <!-- NAVBAR -->
+    <nav id="navbar">
+      <div class="nav-inner">
+        <a class="nav-logo" href="#dashboard" onclick="navigate('dashboard')">
+          <span class="nav-logo-icon">⚖</span>
+          <span class="nav-logo-text">NYS <span class="gold">RE</span> Exam</span>
+        </a>
+
+        <div class="nav-links">
+          <a class="nav-link" href="#dashboard" onclick="navigate('dashboard')">Dashboard</a>
+
+          <div class="nav-dropdown">
+            <button class="nav-link nav-dropdown-btn">
+              Units <span class="dropdown-arrow">▾</span>
+            </button>
+            <div class="nav-dropdown-menu" id="units-dropdown"></div>
+          </div>
+
+          <a class="nav-link" href="#final" onclick="navigate('final')">Final Review</a>
+          <a class="nav-link nav-admin-link" id="nav-admin-link" href="#admin" onclick="navigate('admin')" style="display:none">Admin</a>
+        </div>
+
+        <div class="nav-right">
+          <div class="nav-progress-badge" id="nav-progress-badge">
+            <div class="progress-badge-ring">
+              <svg width="36" height="36" viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(201,168,76,0.2)" stroke-width="2.5"/>
+                <circle cx="18" cy="18" r="14" fill="none" stroke="#C9A84C" stroke-width="2.5"
+                  stroke-dasharray="87.96" stroke-dashoffset="87.96"
+                  id="nav-ring" stroke-linecap="round" transform="rotate(-90 18 18)"/>
+              </svg>
+            </div>
+            <span id="nav-pct">0%</span>
+          </div>
+          <button class="nav-sign-out" onclick="handleSignOut()" title="Sign out">⏏</button>
+        </div>
+
+        <button class="nav-mobile-toggle" id="mobile-toggle" onclick="toggleMobileMenu()">☰</button>
+      </div>
+
+      <div class="mobile-menu" id="mobile-menu">
+        <a class="mobile-link" href="#dashboard" onclick="navigate('dashboard');closeMobileMenu()">Dashboard</a>
+        <div id="mobile-units-links"></div>
+        <a class="mobile-link" href="#final" onclick="navigate('final');closeMobileMenu()">Final Review</a>
+        <a class="mobile-link" id="mobile-admin-link" href="#admin" onclick="navigate('admin');closeMobileMenu()" style="display:none">⚙ Admin Panel</a>
+        <a class="mobile-link" onclick="handleSignOut()" style="color:var(--text-muted)">Sign Out</a>
+      </div>
+    </nav>
+
+    <!-- PAGE CONTENT -->
+    <main id="page-content"></main>
+
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="supabase-config.js"></script>
+  <script src="questions_data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
